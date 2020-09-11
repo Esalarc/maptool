@@ -13,10 +13,12 @@
 
 package net.rptools.maptool.webapi;
 
+import net.rptools.lib.MD5Key;
 import net.rptools.maptool.model.Asset;
 import net.rptools.maptool.model.AssetManager;
 import net.rptools.maptool.model.Token;
 import net.rptools.maptool.util.ImageManager;
+
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 
@@ -24,6 +26,8 @@ import javax.imageio.ImageIO;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 
@@ -46,6 +50,8 @@ public class TokenImageHandler extends AbstractHandler {
             baseRequest.setHandled(sendImage(response, args[1]));
         } else if ("portraitOrImage".equalsIgnoreCase(args[0])) {
             baseRequest.setHandled(sendPortraitOrImage(response, args[1]));
+        } else if ("state".equalsIgnoreCase(args[0])){
+        	baseRequest.setHandled(sendStateImage(response, args[1]));
         }
 
 
@@ -59,7 +65,23 @@ public class TokenImageHandler extends AbstractHandler {
 
 
 
-    private boolean sendImage(HttpServletResponse response, String tokenId) throws IOException {
+    private boolean sendStateImage(HttpServletResponse response, String assetID) throws IOException {
+    	MD5Key assetMD5Key = new MD5Key(assetID);
+        Asset asset = AssetManager.getAsset(assetMD5Key);
+        if (asset == null)
+        	return false;
+        byte[] image = asset.getImage();
+        response.setContentType("image/" + asset.getImageExtension());
+        response.setStatus(HttpServletResponse.SC_OK);
+
+        response.setContentLength(image.length);
+        response.getOutputStream().write(image);
+        return true;
+	}
+
+
+
+	private boolean sendImage(HttpServletResponse response, String tokenId) throws IOException {
         System.out.println("DEBUG: Here (> 0) as well");
         Token token = WebTokenInfo.getInstance().findTokenFromId(tokenId);
         if (token == null) {

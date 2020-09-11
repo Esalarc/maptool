@@ -16,6 +16,7 @@ package net.rptools.maptool.webapi;
 import net.rptools.maptool.client.MapTool;
 import net.rptools.maptool.language.I18N;
 import net.sf.json.JSONObject;
+
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.HandlerList;
@@ -83,6 +84,23 @@ public class MTWebAppServer {
         this.port = port;
     }
 
+    public synchronized void restartServer() throws Exception {
+    	stopServer();
+    	startServer();
+    }
+    public synchronized void stopServer() throws Exception {
+    	if (server == null || !hasStarted())
+    		return;
+    	server.stop();
+    	while (true){
+    		if (server.isStopped()) {
+    			break;
+    		}
+    		Thread.sleep(500);
+
+    	}
+    	started = false;
+    }
     /**
      * Starts the server at the specified port.
      */

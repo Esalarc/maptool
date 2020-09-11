@@ -17,15 +17,22 @@ import net.rptools.lib.AppEvent;
 import net.rptools.lib.AppEventListener;
 import net.rptools.maptool.client.AppUtil;
 import net.rptools.maptool.client.MapTool;
+import net.rptools.maptool.client.functions.AbstractTokenAccessorFunction;
+import net.rptools.maptool.client.ui.token.BooleanTokenOverlay;
+import net.rptools.maptool.client.ui.token.ImageTokenOverlay;
 import net.rptools.maptool.client.ui.tokenpanel.InitiativePanel;
 import net.rptools.maptool.model.*;
+import net.rptools.maptool.model.Token.Type;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 
 import javax.swing.*;
+
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class WebAppInitiative {
 
@@ -99,7 +106,6 @@ public class WebAppInitiative {
             public void run() {
                 MapTool.getEventDispatcher().addListener(initiativeListener, MapTool.ZoneEvent.Activated);
                 initiativeListener.updateListeners();
-                System.out.println("Here...");
             }
         });
     }
@@ -113,6 +119,7 @@ public class WebAppInitiative {
 
         JSONArray tokArray = new JSONArray();
         int index = 0;
+        Map<String, BooleanTokenOverlay> tokenStatesMap = MapTool.getCampaign().getTokenStatesMap();
         for (InitiativeList.TokenInitiative token : tokenInitList) {
             if (InitiativeListModel.isTokenVisible(token.getToken(), initiativeList.isHideNPC())) {
                 JSONObject tokJSon = new JSONObject();
@@ -127,6 +134,27 @@ public class WebAppInitiative {
                     tokJSon.put("playerOwns", "false");
                 }*/
                 tokJSon.put("playerOwns", AppUtil.playerOwns(token.getToken()));
+                tokJSon.put("tokenType", token.getToken().getType());
+                tokJSon.put("visible", token.getToken().isVisible());
+                JSONArray states = new JSONArray();
+                Set<String> tokenStates = token.getToken().getStatePropertyNames();
+                for (String tokenState : tokenStates){
+                	Object value = token.getToken().getState(tokenState);
+                	if (value != null && AbstractTokenAccessorFunction.getBooleanValue(value)){
+	                    JSONObject tokState = new JSONObject();
+	                    tokState.put("state", tokenState);
+	                    BooleanTokenOverlay overlay = tokenStatesMap.get(tokenState);
+	                    if (overlay != null && overlay instanceof ImageTokenOverlay){
+	                    	tokState.put("hasImage", true);
+	                    	tokState.put("image", ((ImageTokenOverlay)overlay).getAssetId().toString());
+	                    } else {
+	                    	tokState.put("hasImage", false);
+	                    }
+	                	states.add(tokState);
+                	}
+                }
+                tokJSon.put("activeStates", states);
+                
                 tokArray.add(tokJSon);
             }
             index++;
