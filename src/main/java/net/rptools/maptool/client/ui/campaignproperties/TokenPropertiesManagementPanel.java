@@ -215,6 +215,9 @@ public class TokenPropertiesManagementPanel extends AbeillePanel<CampaignPropert
       if (property.getDefaultValue() != null) {
         builder.append(":").append(property.getDefaultValue());
       }
+      if (property.getHeroLabXPath() != null) {
+        builder.append("|").append(property.getHeroLabXPath());
+      }
       builder.append("\n");
     }
 
@@ -266,6 +269,16 @@ public class TokenPropertiesManagementPanel extends AbeillePanel<CampaignPropert
 
           // Ran out of special characters
           break;
+        }
+        int indexXpath = line.indexOf("|");
+        if (indexXpath > 0) {
+          String xPath = line.substring(indexXpath + 1).trim();
+          if (xPath.length() > 0) {
+            property.setHeroLabXPath(xPath);
+          }
+
+          // remove the default value from the end of the string...
+          line = line.substring(0, indexXpath);
         }
 
         // default value

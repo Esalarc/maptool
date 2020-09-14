@@ -23,6 +23,7 @@ public class TokenProperty implements Serializable {
   private boolean ownerOnly;
   private boolean gmOnly;
   private String defaultValue;
+  private String heroLabXPath;
 
   public TokenProperty() {
     // For serialization
@@ -110,5 +111,13 @@ public class TokenProperty implements Serializable {
 
   public void setDefaultValue(String defaultValue) {
     this.defaultValue = defaultValue;
+  }
+
+  public void setHeroLabXPath(String xPath) {
+    this.heroLabXPath = xPath;
+  }
+
+  public String getHeroLabXPath() {
+    return this.heroLabXPath;
   }
 }

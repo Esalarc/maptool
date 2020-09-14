@@ -52,6 +52,8 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.IOException;
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -74,6 +76,11 @@ import java.util.concurrent.Executors;
 import javax.imageio.ImageIO;
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.*;
+
 import net.rptools.lib.CodeTimer;
 import net.rptools.lib.MD5Key;
 import net.rptools.lib.swing.ImageBorder;
@@ -106,31 +113,11 @@ import net.rptools.maptool.client.ui.token.NewTokenDialog;
 import net.rptools.maptool.client.walker.ZoneWalker;
 import net.rptools.maptool.client.walker.astar.AStarCellPoint;
 import net.rptools.maptool.language.I18N;
-import net.rptools.maptool.model.AbstractPoint;
-import net.rptools.maptool.model.Asset;
-import net.rptools.maptool.model.AssetManager;
-import net.rptools.maptool.model.CellPoint;
-import net.rptools.maptool.model.ExposedAreaMetaData;
-import net.rptools.maptool.model.GUID;
-import net.rptools.maptool.model.Grid;
-import net.rptools.maptool.model.GridCapabilities;
-import net.rptools.maptool.model.IsometricGrid;
-import net.rptools.maptool.model.Label;
-import net.rptools.maptool.model.LightSource;
-import net.rptools.maptool.model.LookupTable;
+import net.rptools.maptool.model.*;
 import net.rptools.maptool.model.LookupTable.LookupEntry;
-import net.rptools.maptool.model.ModelChangeEvent;
-import net.rptools.maptool.model.ModelChangeListener;
-import net.rptools.maptool.model.Path;
-import net.rptools.maptool.model.Player;
-import net.rptools.maptool.model.TextMessage;
-import net.rptools.maptool.model.Token;
 import net.rptools.maptool.model.Token.TerrainModifierOperation;
 import net.rptools.maptool.model.Token.TokenShape;
-import net.rptools.maptool.model.TokenFootprint;
-import net.rptools.maptool.model.Zone;
 import net.rptools.maptool.model.Zone.Layer;
-import net.rptools.maptool.model.ZonePoint;
 import net.rptools.maptool.model.drawing.Drawable;
 import net.rptools.maptool.model.drawing.DrawableNoise;
 import net.rptools.maptool.model.drawing.DrawableTexturePaint;
@@ -143,6 +130,10 @@ import net.rptools.maptool.util.TokenUtil;
 import net.rptools.parser.ParserException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /** */
 public class ZoneRenderer extends JComponent
@@ -4643,6 +4634,94 @@ public class ZoneRenderer extends JComponent
             token.setY(token.getY() - size.height / 2);
           }
           break;
+      }
+
+      if (token.getHeroLabData() != null){
+        XPathFactory xPathfactory = XPathFactory.newInstance();
+        XPath xpath = xPathfactory.newXPath();
+
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = null;
+
+        try {
+          builder = factory.newDocumentBuilder();
+        } catch (ParserConfigurationException e) {
+          e.printStackTrace();
+        }
+
+        if (builder != null) {
+          String xmnlStatBlock = token.getHeroLabData().getStatBlock_xml();
+          if (!StringUtil.isEmpty(xmnlStatBlock)) {
+            try {
+              Document statBlockDoc = builder.parse(new InputSource(new StringReader(xmnlStatBlock)));
+              try {
+                XPathExpression xpath_size = xpath.compile("/document/public/character/size/@name");
+
+                String sizeName = (String) xpath_size.evaluate(statBlockDoc, XPathConstants.STRING);
+                if (!StringUtil.isEmpty(sizeName)) {
+                  for (TokenFootprint footprint : zone.getGrid().getFootprints()) {
+                    if (footprint.getName().equals(sizeName)) {
+                      token.setFootprint(zone.getGrid(), footprint);
+                      break;
+                    }
+                  }
+                }
+              } catch (XPathExpressionException e) {
+                e.printStackTrace();
+              }
+
+              try {
+                XPathExpression xpath_relation = xpath.compile("/document/public/character/@relationship");
+
+                String relationName = (String) xpath_relation.evaluate(statBlockDoc, XPathConstants.STRING);
+                if (!StringUtil.isEmpty(relationName)) {
+                  token.setState(relationName, Boolean.TRUE);
+                }
+              } catch (XPathExpressionException e) {
+                e.printStackTrace();
+              }
+
+              List<TokenProperty> propertyList =
+                      MapTool.getCampaign().getCampaignProperties().getTokenPropertyList(token.getPropertyType());
+              if (propertyList != null) {
+                for (TokenProperty property : propertyList) {
+                  if (!StringUtil.isEmpty(property.getHeroLabXPath())) {
+                    try {
+                      XPathExpression xpath_property = xpath.compile(property.getHeroLabXPath());
+                      if (property.getHeroLabXPath().startsWith("/")) {
+                        NodeList nodes = (NodeList) xpath_property.evaluate(statBlockDoc, XPathConstants.NODESET);
+                        ArrayList<String> matches = new ArrayList<>();
+                        for (int i = 0; i < nodes.getLength(); ++i) {
+                          matches.add(nodes.item(i).getTextContent());
+                        }
+                        if (property.getHeroLabXPath().startsWith("//")) {
+                          token.setProperty(property.getName(), String.join("\n", matches));
+                        } else {
+                          int start = 0;
+                          List<String> chunkedList = new ArrayList<>();
+                          while (start < matches.size()){
+                            int end = Math.min(start + 5, matches.size());
+                            chunkedList.add(String.join(", ", matches.subList(start, end)));
+                            start = end + 1;
+                          }
+
+                          token.setProperty(property.getName(), String.join("\n", chunkedList));
+                        }
+                      } else {
+                        String value = (String) xpath_property.evaluate(statBlockDoc, XPathConstants.STRING);
+                        token.setProperty(property.getName(), value);
+                      }
+                    } catch (XPathExpressionException e) {
+                      e.printStackTrace();
+                    }
+                  }
+                }
+              }
+            } catch (SAXException | IOException e) {
+              e.printStackTrace();
+            }
+          }
+        }
       }
 
       // FJE Yes, this looks redundant. But calling getType() retrieves the type of
